@@ -153,17 +153,31 @@ textarea.copybuf { position: absolute; left: -9999px; }
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
       <div class="watch" id="watch"><span class="dot" id="watchDot"></span><span id="watchText">Connecting…</span></div>
-      <div class="who" id="who" hidden><span id="whoEmail"></span><button class="linkbtn" id="signOut" type="button">Sign out</button></div>
+      <div class="who" id="who" hidden><span id="whoEmail"></span><button class="linkbtn" id="changePw" type="button" hidden>Change password</button><button class="linkbtn" id="signOut" type="button">Sign out</button></div>
     </div>
   </header>
 
   <section class="signin" id="signin" hidden>
     <h2 id="signinTitle">Sign in</h2>
-    <p id="signinText">Enter your work email and we'll send you a sign-in link. No password needed.</p>
-    <input type="email" id="email" autocomplete="email" placeholder="name@meditrade.net">
+    <p id="signinText">Sign in with your work email and password. No password yet? Use “Email me a sign-in link” instead.</p>
+    <input type="email" id="email" autocomplete="username" placeholder="name@meditrade.net">
+    <input type="password" id="password" autocomplete="current-password" placeholder="Password">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <button class="primary" id="sendLink" type="button">Email me a sign-in link</button>
-      <span class="status" id="signinStatus"></span>
+      <button class="primary" id="pwSignIn" type="button">Sign in</button>
+      <button id="sendLink" type="button">Email me a sign-in link</button>
+    </div>
+    <span class="status" id="signinStatus"></span>
+  </section>
+
+  <section class="signin" id="pwChange" hidden>
+    <h2>Change your password</h2>
+    <p>At least 8 characters. You'll use it next time you sign in.</p>
+    <input type="password" id="newPw" autocomplete="new-password" placeholder="New password">
+    <input type="password" id="newPw2" autocomplete="new-password" placeholder="Repeat new password">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="primary" id="savePw" type="button">Save password</button>
+      <button id="cancelPw" type="button">Cancel</button>
+      <span class="status" id="pwStatus"></span>
     </div>
   </section>
 
@@ -245,7 +259,7 @@ textarea.copybuf { position: absolute; left: -9999px; }
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, onAuthStateChanged, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, onAuthStateChanged, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, signOut, signInWithEmailAndPassword, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, onSnapshot, runTransaction, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // Firebase web config — public by design; access is controlled by Firestore security rules.
@@ -270,7 +284,8 @@ let unsubs = [];
 
 /* ---------- sign-in ---------- */
 function showSignin(title, text) {
-  $("signin").hidden = false; $("app").hidden = true; $("who").hidden = true;
+  $("signin").hidden = false; $("app").hidden = true; $("who").hidden = true; $("pwChange").hidden = true;
+  $("signin").querySelectorAll("input,button").forEach(x => x.hidden = false);
   if (title) $("signinTitle").textContent = title;
   if (text) $("signinText").textContent = text;
 }
@@ -302,23 +317,56 @@ $("sendLink").addEventListener("click", async () => {
       store.set(EMAIL_KEY, email);
       setSigninStatus("Link sent — check your inbox (and junk folder)", "ok");
     }
-  } catch (e) { setSigninStatus(e?.code === "auth/invalid-action-code" ? "That link has expired — request a new one" : "Couldn't send the link — try again", "err"); }
+  } catch (e) {
+    const c = e?.code || "";
+    setSigninStatus(c === "auth/invalid-action-code" ? "That link has expired — request a new one"
+      : c === "auth/quota-exceeded" ? "Today's limit of sign-in emails has been reached — use your password, or try the link again tomorrow"
+      : c === "auth/admin-restricted-operation" ? "This email doesn't have an account yet — ask Miguel to create one"
+      : "Couldn't send the link — try again", "err");
+  }
   $("sendLink").disabled = false;
 });
-$("email").addEventListener("keydown", e => { if (e.key === "Enter") $("sendLink").click(); });
+$("pwSignIn").addEventListener("click", async () => {
+  const email = $("email").value.trim().toLowerCase(), pw = $("password").value;
+  if (!email || !pw) { setSigninStatus("Enter your email and password", "err"); return; }
+  $("pwSignIn").disabled = true; setSigninStatus("Signing in…");
+  try { await signInWithEmailAndPassword(auth, email, pw); $("password").value = ""; setSigninStatus(""); }
+  catch (e) {
+    const c = e?.code || "";
+    setSigninStatus(c === "auth/too-many-requests" ? "Too many attempts — wait a few minutes and try again"
+      : (c === "auth/invalid-credential" || c === "auth/wrong-password" || c === "auth/user-not-found" || c === "auth/invalid-email") ? "Email or password not recognised"
+      : "Couldn't sign in — try again", "err");
+  }
+  $("pwSignIn").disabled = false;
+});
+$("password").addEventListener("keydown", e => { if (e.key === "Enter") $("pwSignIn").click(); });
+$("email").addEventListener("keydown", e => { if (e.key === "Enter") $("password").focus(); });
 $("signOut").addEventListener("click", () => signOut(auth));
+$("changePw").addEventListener("click", () => { $("pwChange").hidden = false; $("newPw").focus(); });
+$("cancelPw").addEventListener("click", () => { $("pwChange").hidden = true; $("newPw").value = $("newPw2").value = ""; $("pwStatus").textContent = ""; });
+$("savePw").addEventListener("click", async () => {
+  const a = $("newPw").value, b = $("newPw2").value, st = $("pwStatus");
+  if (a.length < 8) { st.textContent = "Use at least 8 characters"; st.className = "status err"; return; }
+  if (a !== b) { st.textContent = "The two passwords don't match"; st.className = "status err"; return; }
+  $("savePw").disabled = true;
+  try { await updatePassword(auth.currentUser, a); $("newPw").value = $("newPw2").value = ""; st.textContent = "Password changed"; st.className = "status ok"; setTimeout(() => { $("pwChange").hidden = true; st.textContent = ""; }, 1500); }
+  catch (e) { st.textContent = e?.code === "auth/requires-recent-login" ? "For security, sign out and back in, then change it" : "Couldn't change the password — try again"; st.className = "status err"; }
+  $("savePw").disabled = false;
+});
 
 onAuthStateChanged(auth, async user => {
   unsubs.forEach(u => { try { u(); } catch {} }); unsubs = [];
   me = user; ready = false;
   if (!user) { showSignin(); $("watchText").textContent = "Signed out"; $("watchDot").className = "dot"; return; }
   $("signin").hidden = true; $("who").hidden = false; $("whoEmail").textContent = user.email;
+  $("signin").querySelectorAll("input,button").forEach(x => x.hidden = false);
+  $("changePw").hidden = !user.providerData.some(p => p.providerId === "password");
   // Access check: the rules only let listed people read.
   try { await getDoc(doc(fs, "batches", "_access_check")); }
   catch (e) {
     $("app").hidden = true;
     showSignin("No access", `${user.email} isn't on the list of people allowed to use this sheet. Ask Miguel to add you.`);
-    $("signin").querySelector("input").hidden = true; $("sendLink").hidden = true; $("who").hidden = false;
+    $("signin").querySelectorAll("input,button").forEach(x => x.hidden = true); $("who").hidden = false;
     $("watchDot").className = "dot off"; $("watchText").textContent = "No access";
     return;
   }
