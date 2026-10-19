@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>FBA Dispatch Sheet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+
+/* Layout: one working column — drop zone, then the sales order slip (order no. + SKU table), then footnotes for held/skipped lines. */
+:root {
+  --bg: #f3f6f6;
+  --surface: #ffffff;
+  --ink: #142326;
+  --muted: #5b6d70;
+  --line: #d7e0e1;
+  --accent: #0d6e74;
+  --accent-ink: #ffffff;
+  --accent-soft: #e2f0f0;
+  --ok: #2f7d4a;
+  --ok-soft: #e4f3e8;
+  --warn: #9a6200;
+  --warn-soft: #fbf0d9;
+  --bad: #a3322a;
+  --bad-soft: #f8e4e1;
+  --font-ui: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1719; --surface: #162124; --ink: #e3ecec; --muted: #93a6a8; --line: #2a393c;
+    --accent: #4fb3b8; --accent-ink: #08201f; --accent-soft: #1a3436;
+    --ok: #6cc28a; --ok-soft: #173023; --warn: #e3b25a; --warn-soft: #33270f; --bad: #f08a80; --bad-soft: #3a1e1b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1719; --surface: #162124; --ink: #e3ecec; --muted: #93a6a8; --line: #2a393c;
+  --accent: #4fb3b8; --accent-ink: #08201f; --accent-soft: #1a3436;
+  --ok: #6cc28a; --ok-soft: #173023; --warn: #e3b25a; --warn-soft: #33270f; --bad: #f08a80; --bad-soft: #3a1e1b;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+#result { display: flex; flex-direction: column; gap: 12px; }
+@media (max-width: 560px) { th.prodh, td.prod { display: none; } th, td { padding-left: 14px; padding-right: 14px; } }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+h1 { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+.sub { color: var(--muted); margin: 2px 0 0; font-size: 14px; }
+.watch { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: none; }
+.dot.live { background: var(--accent); }
+.dot.off { background: var(--bad); }
+
+.drop {
+  border: 1.5px dashed var(--line); border-radius: 10px; background: var(--surface);
+  padding: 28px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;
+  transition: border-color .15s, background .15s; cursor: pointer;
+}
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.drop strong { font-size: 16px; }
+.drop .hint { color: var(--muted); font-size: 13px; }
+.drop.compact { padding: 12px 16px; flex-direction: row; justify-content: center; gap: 10px; }
+.drop.compact .hint { display: none; }
+
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.step { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; font-size: 13.5px; color: var(--muted); }
+.step b { display: block; color: var(--ink); font-size: 14px; margin-bottom: 2px; }
+@media (max-width: 620px) { .steps { grid-template-columns: 1fr; } }
+
+.alert { border-radius: 8px; padding: 12px 16px; font-size: 14px; border: 1px solid var(--bad); background: var(--bad-soft); color: var(--ink); }
+.alert b { color: var(--bad); }
+.alert.warn { border-color: var(--warn); background: var(--warn-soft); }
+.alert.warn b { color: var(--warn); }
+
+.slip { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.slip-head { display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: flex-end; justify-content: space-between; padding: 18px 20px; border-bottom: 1px solid var(--line); }
+.label { font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.ordno { font-family: var(--font-mono); font-size: 30px; font-weight: 600; letter-spacing: .02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.ordno.clash { color: var(--bad); text-decoration: line-through; }
+.datepick { display: flex; flex-direction: column; gap: 4px; }
+.datepick input { font: inherit; font-size: 14px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+.datepick small { color: var(--muted); font-size: 12px; }
+
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 10px 20px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; background: var(--bg); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.sku { font-family: var(--font-mono); font-weight: 600; white-space: nowrap; }
+td.prod { color: var(--muted); min-width: 0; }
+tfoot td { font-weight: 700; border-bottom: none; }
+.chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; margin-left: 6px; white-space: nowrap; vertical-align: 1px; }
+.chip.backlog { background: var(--ok-soft); color: var(--ok); }
+.chip.check { background: var(--warn-soft); color: var(--warn); }
+.chip.bad { background: var(--bad-soft); color: var(--bad); }
+.lines td { font-size: 13px; padding-top: 6px; padding-bottom: 6px; }
+.lines td.oid { font-family: var(--font-mono); font-size: 12.5px; }
+details.linewrap > summary { cursor: pointer; padding: 12px 20px; color: var(--accent); font-weight: 600; font-size: 13.5px; list-style: none; }
+details.linewrap > summary::-webkit-details-marker { display: none; }
+details.linewrap > summary::before { content: "▸ "; }
+details.linewrap[open] > summary::before { content: "▾ "; }
+details.linewrap > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--line); background: var(--bg); align-items: center; }
+button { font: inherit; font-size: 14px; font-weight: 600; border-radius: 7px; padding: 9px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+button:hover { border-color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:disabled { opacity: .55; cursor: not-allowed; }
+.spacer { flex: 1; }
+.status { font-size: 13.5px; color: var(--muted); }
+.status.ok { color: var(--ok); font-weight: 600; }
+.status.err { color: var(--bad); font-weight: 600; }
+
+.notes { display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; color: var(--muted); }
+.notes p { margin: 0; }
+.notes b { color: var(--ink); font-weight: 600; }
+.empty { padding: 26px 20px; color: var(--muted); text-align: center; }
+textarea.copybuf { position: absolute; left: -9999px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.signin { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 24px 20px; display: flex; flex-direction: column; gap: 12px; max-width: 460px; }
+.signin h2 { margin: 0; font-size: 17px; }
+.signin p { margin: 0; color: var(--muted); font-size: 14px; }
+.signin input { font: inherit; font-size: 15px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--ink); width: 100%; }
+.who { font-size: 13px; color: var(--muted); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.linkbtn { background: none; border: none; padding: 0; color: var(--accent); font-weight: 600; font-size: 13px; cursor: pointer; }
+.recent { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.recent summary { cursor: pointer; padding: 12px 20px; font-weight: 600; font-size: 13.5px; color: var(--accent); list-style: none; }
+.recent summary::-webkit-details-marker { display: none; }
+.recent td.mono { font-family: var(--font-mono); font-size: 13px; }
+.admin { font-size: 13px; color: var(--muted); }
+.admin summary { cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>FBA Dispatch Sheet</h1>
+      <p class="sub">Amazon FBA report → shipped Meditrade lines for internal sales</p>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+      <div class="watch" id="watch"><span class="dot" id="watchDot"></span><span id="watchText">Connecting…</span></div>
+      <div class="who" id="who" hidden><span id="whoEmail"></span><button class="linkbtn" id="signOut" type="button">Sign out</button></div>
+    </div>
+  </header>
+
+  <section class="signin" id="signin" hidden>
+    <h2 id="signinTitle">Sign in</h2>
+    <p id="signinText">Enter your work email and we'll send you a sign-in link. No password needed.</p>
+    <input type="email" id="email" autocomplete="email" placeholder="name@meditrade.net">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="primary" id="sendLink" type="button">Email me a sign-in link</button>
+      <span class="status" id="signinStatus"></span>
+    </div>
+  </section>
+
+  <div id="app" hidden style="display:flex;flex-direction:column;gap:20px">
+    <label class="drop" id="drop" tabindex="0" for="file">
+      <strong id="dropTitle">Drop the FBA report here</strong>
+      <span class="hint">or click to choose · .csv, .txt or .xlsx straight from Seller Central</span>
+      <input type="file" id="file" accept=".csv,.txt,.tsv,.xlsx,.xls" hidden>
+    </label>
+
+    <section class="steps" id="intro">
+      <div class="step"><b>Paid, shipped, Meditrade only</b>A line goes on the sheet only when Amazon shows the order as Shipped (not Pending) and the product is Meditrade. GentleCare and other brands are left off.</div>
+      <div class="step"><b>Amazon's line totals, not unit prices</b>Net = item price − promotion − VAT, all as Amazon reports them for the line. Unit price is that net ÷ quantity.</div>
+      <div class="step"><b>Nothing goes out twice</b>Copying the table records every line as sent. A later report skips anything already sent, and an order number can only be used once.</div>
+    </section>
+
+    <div class="alert" id="blocker" hidden></div>
+
+    <section id="result" hidden>
+      <div class="slip">
+        <div class="slip-head">
+          <div>
+            <div class="label">Sales order number</div>
+            <div class="ordno" id="ordno">—</div>
+          </div>
+          <div class="datepick">
+            <label class="label" for="day">Report day</label>
+            <input type="date" id="day">
+            <small id="daySource"></small>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>SKU</th><th class="prodh">Product</th><th class="num">Qty</th><th class="num">Price per unit</th><th class="num">Total</th></tr></thead>
+            <tbody id="skuBody"></tbody>
+            <tfoot id="skuFoot"></tfoot>
+          </table>
+        </div>
+        <details class="linewrap" id="lineWrap">
+          <summary id="lineSummary">Show order lines</summary>
+          <div class="tbl-wrap">
+            <table class="lines">
+              <thead><tr><th>Amazon order ID</th><th>SKU</th><th class="num">Qty</th><th class="num">Line gross</th><th class="num">Promo</th><th class="num">VAT</th><th class="num">Line net</th></tr></thead>
+              <tbody id="lineBody"></tbody>
+            </table>
+          </div>
+        </details>
+        <div class="actions">
+          <button id="csvBtn" type="button" hidden>Download CSV</button>
+          <span class="spacer"></span>
+          <span class="status" id="status"></span>
+          <button class="primary" id="sendBtn" type="button">Copy email table &amp; mark as sent</button>
+        </div>
+      </div>
+      <div class="notes" id="notes"></div>
+    </section>
+
+    <details class="recent" id="recentWrap">
+      <summary id="recentSummary">Recent sends</summary>
+      <div class="tbl-wrap">
+        <table class="lines">
+          <thead><tr><th>Order no.</th><th>Report day</th><th class="num">Lines</th><th class="num">Qty</th><th class="num">Net</th><th>Sent by</th><th>When</th></tr></thead>
+          <tbody id="recentBody"></tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="admin">
+      <summary>One-time setup: import history file</summary>
+      <p>Only for loading the starting history. Choose the history .json file you were given.</p>
+      <input type="file" id="importFile" accept=".json">
+      <span class="status" id="importStatus"></span>
+    </details>
+  </div>
+
+  <textarea class="copybuf" id="copybuf" aria-hidden="true" tabindex="-1"></textarea>
+  <div id="richbuf" aria-hidden="true" style="position:absolute;left:-9999px;top:0;"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, onSnapshot, runTransaction, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// Firebase web config — public by design; access is controlled by Firestore security rules.
+const firebaseConfig = {"apiKey":"AIzaSyAIZXLMDF-wi4PqF_QpF10XZu9b9x20gfQ","authDomain":"meditrade-fba-dispatch.firebaseapp.com","projectId":"meditrade-fba-dispatch","storageBucket":"meditrade-fba-dispatch.firebasestorage.app","messagingSenderId":"55114023493","appId":"1:55114023493:web:e61402d8527a132510592c"};
+
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const fs = getFirestore(fbApp);
+
+const $ = id => document.getElementById(id);
+const gbp = n => "£" + n.toFixed(2);
+const r2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+const pad = n => String(n).padStart(2, "0");
+const BRAND = /^\s*meditrade\b/i;
+const EMAIL_KEY = "fbaSignInEmail";
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} }, del(k) { try { localStorage.removeItem(k); } catch {} } };
+
+let me = null, ready = false;
+let pendingMap = new Map();
+let state = null;
+let unsubs = [];
+
+/* ---------- sign-in ---------- */
+function showSignin(title, text) {
+  $("signin").hidden = false; $("app").hidden = true; $("who").hidden = true;
+  if (title) $("signinTitle").textContent = title;
+  if (text) $("signinText").textContent = text;
+}
+function setSigninStatus(t, kind) { const s = $("signinStatus"); s.textContent = t; s.className = "status" + (kind ? " " + kind : ""); }
+
+async function completeLinkIfPresent() {
+  if (!isSignInWithEmailLink(auth, location.href)) return;
+  let email = store.get(EMAIL_KEY);
+  if (!email) {
+    showSignin("Confirm your email", "You opened the sign-in link on a different device or browser. Enter the same email address to finish signing in.");
+    $("sendLink").textContent = "Finish signing in";
+    $("sendLink").dataset.mode = "finish";
+    return;
+  }
+  try { await signInWithEmailLink(auth, email, location.href); store.del(EMAIL_KEY); history.replaceState(null, "", location.pathname); }
+  catch (e) { showSignin("Link expired", "That sign-in link has expired or was already used. Request a new one."); }
+}
+
+$("sendLink").addEventListener("click", async () => {
+  const email = $("email").value.trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setSigninStatus("Enter a valid email", "err"); return; }
+  $("sendLink").disabled = true;
+  try {
+    if ($("sendLink").dataset.mode === "finish") {
+      await signInWithEmailLink(auth, email, location.href);
+      history.replaceState(null, "", location.pathname);
+    } else {
+      await sendSignInLinkToEmail(auth, email, { url: location.origin + location.pathname, handleCodeInApp: true });
+      store.set(EMAIL_KEY, email);
+      setSigninStatus("Link sent — check your inbox (and junk folder)", "ok");
+    }
+  } catch (e) { setSigninStatus(e?.code === "auth/invalid-action-code" ? "That link has expired — request a new one" : "Couldn't send the link — try again", "err"); }
+  $("sendLink").disabled = false;
+});
+$("email").addEventListener("keydown", e => { if (e.key === "Enter") $("sendLink").click(); });
+$("signOut").addEventListener("click", () => signOut(auth));
+
+onAuthStateChanged(auth, async user => {
+  unsubs.forEach(u => { try { u(); } catch {} }); unsubs = [];
+  me = user; ready = false;
+  if (!user) { showSignin(); $("watchText").textContent = "Signed out"; $("watchDot").className = "dot"; return; }
+  $("signin").hidden = true; $("who").hidden = false; $("whoEmail").textContent = user.email;
+  // Access check: the rules only let listed people read.
+  try { await getDoc(doc(fs, "batches", "_access_check")); }
+  catch (e) {
+    $("app").hidden = true;
+    showSignin("No access", `${user.email} isn't on the list of people allowed to use this sheet. Ask Miguel to add you.`);
+    $("signin").querySelector("input").hidden = true; $("sendLink").hidden = true; $("who").hidden = false;
+    $("watchDot").className = "dot off"; $("watchText").textContent = "No access";
+    return;
+  }
+  $("app").hidden = false; ready = true;
+  $("watchDot").className = "dot live";
+  unsubs.push(onSnapshot(collection(fs, "pending"), snap => {
+    pendingMap = new Map(snap.docs.map(d => [d.id, d.data()]));
+    const n = pendingMap.size;
+    $("watchText").textContent = n === 0 ? "Tracker connected · no unshipped lines waiting" : `Tracker connected · ${n} unshipped line${n === 1 ? "" : "s"} waiting`;
+  }, () => { $("watchDot").className = "dot off"; $("watchText").textContent = "Tracker disconnected — reload"; ready = false; }));
+  unsubs.push(onSnapshot(collection(fs, "batches"), snap => {
+    const rows = snap.docs.map(d => d.data()).filter(b => b.orderNumber).sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))).slice(0, 15);
+    const tb = $("recentBody"); tb.replaceChildren();
+    for (const b of rows) tb.append(el("tr", {}, el("td", { class: "mono" }, b.orderNumber), el("td", {}, b.day ? ukDate(b.day) : ""), el("td", { class: "num" }, String(b.lines ?? "")), el("td", { class: "num" }, String(b.qty ?? "")), el("td", { class: "num" }, gbp(b.net || 0)), el("td", {}, b.sentBy || "—"), el("td", {}, b.updatedAt ? new Date(b.updatedAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" }) : "")));
+    $("recentSummary").textContent = `Recent sends (${snap.size})`;
+  }));
+});
+completeLinkIfPresent();
+
+/* ---------- parsing ---------- */
+function parseDelimited(text) {
+  text = text.replace(/^﻿/, "");
+  const firstLine = text.split(/\r?\n/, 1)[0];
+  const delim = firstLine.includes("\t") ? "\t" : ",";
+  const rows = []; let row = [], field = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else q = false; } else field += c; }
+    else if (c === '"') q = true;
+    else if (c === delim) { row.push(field); field = ""; }
+    else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(field); rows.push(row); row = []; field = ""; }
+    else field += c;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.some(v => String(v).trim() !== ""));
+}
+async function loadXlsx() {
+  if (window.XLSX) return window.XLSX;
+  await new Promise((res, rej) => { const s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"; s.onload = res; s.onerror = () => rej(new Error("Could not load the Excel reader")); document.head.appendChild(s); });
+  return window.XLSX;
+}
+function toObjects(rows) { const head = rows[0].map(h => String(h).trim().toLowerCase()); return rows.slice(1).map(r => Object.fromEntries(head.map((h, i) => [h, r[i] ?? ""]))); }
+function num(v) { if (typeof v === "number") return v; const s = String(v ?? "").replace(/[£,\s]/g, ""); if (s === "") return null; const n = parseFloat(s); return isNaN(n) ? null : n; }
+function parseDay(v) {
+  if (v instanceof Date && !isNaN(v)) return { y: v.getFullYear(), m: v.getMonth() + 1, d: v.getDate() };
+  const s = String(v ?? "").trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2})?(Z|[+-]\d{2}:?\d{2})?/);
+  if (m) { const dt = new Date(s); if (!isNaN(dt)) { const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(dt); const g = t => +parts.find(p => p.type === t).value; return { y: g("year"), m: g("month"), d: g("day") }; } }
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return { y: +m[1], m: +m[2], d: +m[3] };
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if (m) return { y: m[3].length === 2 ? 2000 + +m[3] : +m[3], m: +m[2], d: +m[1] };
+  return null;
+}
+const dayKey = p => `${p.y}-${pad(p.m)}-${pad(p.d)}`;
+const orderNo = iso => { const [y, m, d] = iso.split("-"); return `${y}${d}${m}`; };
+const ukDate = iso => { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
+const safeKey = (oid, sku) => (String(oid).trim() + "_" + String(sku).trim()).replace(/[^A-Za-z0-9_\-.~:@+]/g, "~").slice(0, 190) || "x";
+
+function classify(r) {
+  const os = String(r["order-status"] || "").trim().toLowerCase();
+  const is = String(r["item-status"] || "").trim().toLowerCase();
+  if (os.includes("cancel") || is.includes("cancel")) return "cancelled";
+  if (os === "shipped" && (is === "shipped" || is === "")) return "shipped";
+  return "unshipped";
+}
+function lineFrom(r) {
+  // Amazon's item-price, item-tax and item-promotion-discount are LINE totals (already × qty).
+  const qty = num(r["quantity"]) ?? 0;
+  const gross = r2(num(r["item-price"]) ?? 0);
+  const promo = r2(Math.abs(num(r["item-promotion-discount"]) ?? 0));
+  const taxRaw = num(r["item-tax"]);
+  const paid = r2(gross - promo);
+  const tax = r2(taxRaw ?? paid / 6);
+  const net = r2(paid - tax);
+  const flags = [];
+  if (taxRaw === null && gross > 0) flags.push("VAT missing in report — estimated at 20%");
+  else if (paid > 0 && tax > 0 && Math.abs(tax - paid / 6) > 0.02) flags.push(`VAT £${tax.toFixed(2)} isn't 20% of £${paid.toFixed(2)} — check`);
+  if (promo) flags.push(`Promotion £${promo.toFixed(2)} taken off`);
+  return { oid: String(r["amazon-order-id"] || "").trim(), sku: String(r["sku"] || "").trim(), product: String(r["product-name"] || "").trim(), qty, gross, promo, tax, net, unitGross: qty ? r2(gross / qty) : 0, unitNet: qty ? r2(net / qty) : 0, purchased: r["purchase-date"] instanceof Date ? r["purchase-date"].toISOString() : String(r["purchase-date"] || ""), flags };
+}
+function mergeLines(list) {
+  const m = new Map();
+  for (const l of list) {
+    const k = safeKey(l.oid, l.sku); const ex = m.get(k);
+    if (ex) { ex.qty += l.qty; ex.gross = r2(ex.gross + l.gross); ex.promo = r2(ex.promo + l.promo); ex.tax = r2(ex.tax + l.tax); ex.net = r2(ex.net + l.net); ex.unitGross = ex.qty ? r2(ex.gross / ex.qty) : 0; ex.unitNet = ex.qty ? r2(ex.net / ex.qty) : 0; ex.flags = [...new Set([...ex.flags, ...l.flags])]; }
+    else m.set(k, { ...l, key: k });
+  }
+  return [...m.values()];
+}
+function priceCheck(lines) {
+  const bySku = new Map();
+  for (const l of lines) { if (!bySku.has(l.sku)) bySku.set(l.sku, []); bySku.get(l.sku).push(l); }
+  for (const [, ls] of bySku) {
+    const count = new Map(); for (const l of ls) count.set(l.unitGross, (count.get(l.unitGross) || 0) + l.qty);
+    const usual = [...count.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    for (const l of ls) if (usual && Math.abs(l.unitGross - usual) / usual > 0.05) l.flags.push(`Price/unit £${l.unitGross.toFixed(2)} vs usual £${usual.toFixed(2)} — check`);
+  }
+}
+
+/* ---------- file handling ---------- */
+async function handleFile(file) {
+  setStatus("");
+  if (!ready) return;
+  try {
+    let rows;
+    if (/\.xlsx?$/i.test(file.name)) { const X = await loadXlsx(); const wb = X.read(await file.arrayBuffer(), { type: "array", cellDates: true }); rows = X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: "" }); }
+    else rows = parseDelimited(await file.text());
+    if (rows.length < 2) throw new Error("The file has no order lines.");
+    const objs = toObjects(rows);
+    if (!("sku" in objs[0]) || !("amazon-order-id" in objs[0])) throw new Error("This doesn't look like an FBA orders report — no sku / amazon-order-id columns.");
+    await analyse(objs, file.name);
+  } catch (e) { $("result").hidden = true; $("intro").hidden = false; $("blocker").hidden = true; $("dropTitle").textContent = e.message || "Could not read that file"; }
+}
+function guessDay(fileName, objs) {
+  const re = /(?:^|[^\d])(\d{1,2})[._](\d{1,2})(?:[._](\d{2,4}))?(?=[^\d]|$)/g; let fm = null, mm;
+  while ((mm = re.exec(fileName))) fm = mm;
+  const counts = {}; for (const r of objs) { const p = parseDay(r["purchase-date"]); if (p) counts[dayKey(p)] = (counts[dayKey(p)] || 0) + 1; }
+  const days = Object.keys(counts).sort(); const lastRow = days[days.length - 1];
+  if (fm) { const d = +fm[1], m = +fm[2]; if (d >= 1 && d <= 31 && m >= 1 && m <= 12) { const y = fm[3] ? (fm[3].length === 2 ? 2000 + +fm[3] : +fm[3]) : (lastRow ? +lastRow.slice(0, 4) : new Date().getFullYear()); return { iso: `${y}-${pad(m)}-${pad(d)}`, src: "from the file name" }; } }
+  if (lastRow) return { iso: lastRow, src: "latest purchase date in the file" };
+  const t = new Date(); return { iso: `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`, src: "today — please check" };
+}
+async function analyse(objs, fileName) {
+  const shipped = [], unshipped = [], cancelled = [], otherBrand = [];
+  for (const r of objs) {
+    if (!String(r["sku"] || "").trim()) continue;
+    const l = lineFrom(r);
+    if (!BRAND.test(l.product)) { otherBrand.push(l); continue; }
+    const c = classify(r); (c === "shipped" ? shipped : c === "unshipped" ? unshipped : cancelled).push(l);
+  }
+  const ship = mergeLines(shipped), hold = mergeLines(unshipped), canc = mergeLines(cancelled);
+  priceCheck([...ship, ...hold]);
+  const alreadySent = [], include = [];
+  const snaps = await Promise.all(ship.map(l => getDoc(doc(fs, "sent", l.key))));
+  ship.forEach((l, i) => {
+    const s = snaps[i]; const sd = s.exists() ? s.data() : null; const sentQty = sd ? (sd.qty || 0) : 0;
+    if (sentQty >= l.qty) { alreadySent.push({ ...l, sentAs: sd.orderNumber }); return; }
+    if (sentQty > 0) { const f = (l.qty - sentQty) / l.qty; include.push({ ...l, qty: l.qty - sentQty, gross: r2(l.gross * f), promo: r2(l.promo * f), tax: r2(l.tax * f), net: r2(l.net * f), prevQty: sentQty, prevNet: sd.net || 0, prevAs: sd.orderNumber, flags: [...l.flags, `${sentQty} already sent on ${sd.orderNumber}`] }); }
+    else include.push(l);
+  });
+  for (const l of include) { const p = pendingMap.get(l.key); if (p) l.backlogSince = p.firstSeenDay; }
+  const newHold = hold.filter(l => !pendingMap.has(l.key));
+  const day = guessDay(fileName, objs);
+  state = { fileName, include, hold, newHold, canc, otherBrand, alreadySent, day: day.iso, daySrc: day.src, sent: false, clash: null };
+  $("day").value = day.iso;
+  await checkClash(); render();
+}
+async function checkClash() { state.clash = null; try { const b = await getDoc(doc(fs, "batches", orderNo(state.day))); if (b.exists()) state.clash = b.data(); } catch {} }
+
+/* ---------- render ---------- */
+function bySku(lines) {
+  const m = new Map();
+  for (const l of lines) { const k = l.sku + "|" + l.unitNet.toFixed(2); const e = m.get(k) || { sku: l.sku, product: l.product, unit: l.unitNet, qty: 0, net: 0, backlog: false, flags: new Set() }; e.qty += l.qty; e.net = r2(e.net + l.net); if (l.backlogSince) e.backlog = true; l.flags.forEach(f => e.flags.add(f)); m.set(k, e); }
+  for (const e of m.values()) e.unit = e.qty ? r2(e.net / e.qty) : 0;
+  return [...m.values()].sort((a, b) => a.sku.localeCompare(b.sku, undefined, { numeric: true }) || b.unit - a.unit);
+}
+function el(tag, attrs = {}, ...kids) { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === "class") e.className = v; else e.setAttribute(k, v); } for (const k of kids) if (k != null) e.append(k); return e; }
+const chip = (cls, text, title) => { const c = el("span", { class: "chip " + cls }, text); if (title) c.title = title; return c; };
+const isHard = f => /check$/.test(f);
+function blockReason() {
+  const s = state;
+  if (!ready) return "<b>Tracker offline.</b> Reload the page. The sheet won't copy without the tracker, because the tracker is what stops lines being sent twice.";
+  if (s.clash && !s.sent) return `<b>Order number ${orderNo(s.day)} was already used</b>${s.clash.sentBy ? " by " + s.clash.sentBy : ""} (${s.clash.qty} units, ${gbp(s.clash.net || 0)}). Change the report day to the last day this report covers.`;
+  return "";
+}
+function render() {
+  const s = state;
+  $("intro").hidden = true; $("result").hidden = false; $("drop").classList.add("compact");
+  $("dropTitle").textContent = `${s.fileName} — drop another report to replace`;
+  $("ordno").textContent = orderNo(s.day); $("ordno").classList.toggle("clash", !!(s.clash && !s.sent)); $("daySource").textContent = s.daySrc;
+  const skus = bySku(s.include); const body = $("skuBody"); body.replaceChildren();
+  if (!skus.length) body.append(el("tr", {}, el("td", { colspan: "5", class: "empty" }, "No new shipped Meditrade lines in this report.")));
+  for (const r of skus) {
+    const prodCell = el("td", { class: "prod" }, r.product);
+    if (r.backlog) prodCell.append(chip("backlog", "Was unshipped", "Held from an earlier report, shipped now"));
+    const hard = [...r.flags].filter(isHard), soft = [...r.flags].filter(f => !isHard(f));
+    if (hard.length) prodCell.append(chip("bad", "Check price", hard.join("; ")));
+    if (soft.length) prodCell.append(chip("check", "Note", soft.join("; ")));
+    body.append(el("tr", {}, el("td", { class: "sku" }, r.sku), prodCell, el("td", { class: "num" }, String(r.qty)), el("td", { class: "num" }, gbp(r.unit)), el("td", { class: "num" }, gbp(r.net))));
+  }
+  const tq = skus.reduce((a, r) => a + r.qty, 0), tn = r2(skus.reduce((a, r) => a + r.net, 0)); const nSku = new Set(skus.map(r => r.sku)).size;
+  $("skuFoot").replaceChildren(el("tr", {}, el("td", {}, "Total"), el("td", { class: "prod" }, `${nSku} SKU${nSku === 1 ? "" : "s"} · net of VAT`), el("td", { class: "num" }, String(tq)), el("td", {}), el("td", { class: "num" }, gbp(tn))));
+  const lb = $("lineBody"); lb.replaceChildren();
+  for (const l of s.include) { const oidCell = el("td", { class: "oid" }, l.oid); if (l.backlogSince) oidCell.append(chip("backlog", "since " + ukDate(l.backlogSince))); lb.append(el("tr", {}, oidCell, el("td", { class: "sku" }, l.sku), el("td", { class: "num" }, String(l.qty)), el("td", { class: "num" }, gbp(l.gross)), el("td", { class: "num" }, l.promo ? "−" + gbp(l.promo) : "—"), el("td", { class: "num" }, gbp(l.tax)), el("td", { class: "num" }, gbp(l.net)))); }
+  $("lineSummary").textContent = `Show ${s.include.length} order line${s.include.length === 1 ? "" : "s"} (Amazon order IDs)`; $("lineWrap").hidden = !s.include.length;
+  const notes = $("notes"); notes.replaceChildren(); const p = html => { const e = el("p"); e.innerHTML = html; notes.append(e); };
+  const hardCount = s.include.filter(l => l.flags.some(isHard)).length;
+  if (hardCount) p(`<b>${hardCount} line${hardCount === 1 ? "" : "s"} marked “Check price”.</b> Open the order lines and compare with Seller Central before sending.`);
+  const n = s.hold.length;
+  if (n) p(`<b>${n} line${n === 1 ? "" : "s"} held back</b> — not shipped yet, or the order is still Pending payment on Amazon${s.newHold.length < n ? ` (${n - s.newHold.length} already being tracked)` : ""}. They’ll appear on the day a later report shows the order Shipped.`);
+  if (s.alreadySent.length) p(`<b>${s.alreadySent.length} shipped line${s.alreadySent.length === 1 ? " was" : "s were"}</b> already sent to sales (${[...new Set(s.alreadySent.map(a => a.sentAs))].join(", ")}) and ${s.alreadySent.length === 1 ? "has" : "have"} been left off.`);
+  if (s.otherBrand.length) p(`<b>${s.otherBrand.length} non-Meditrade line${s.otherBrand.length === 1 ? "" : "s"}</b> left off (${[...new Set(s.otherBrand.map(o => o.sku))].join(", ")}).`);
+  if (s.canc.length) p(`<b>${s.canc.length} cancelled line${s.canc.length === 1 ? "" : "s"}</b> ignored${s.canc.some(c => pendingMap.has(c.key)) ? " and will be removed from the waiting list" : ""}.`);
+  const reason = blockReason(); $("blocker").innerHTML = reason; $("blocker").hidden = !reason;
+  const nothing = !s.include.length && !s.newHold.length && !s.canc.some(c => pendingMap.has(c.key));
+  $("sendBtn").disabled = !!reason || (!s.sent && nothing);
+  $("sendBtn").textContent = s.sent ? "Copy table again" : (s.include.length ? "Copy email table & mark as sent" : "Save held lines");
+  $("csvBtn").hidden = !s.sent;
+}
+
+/* ---------- outputs ---------- */
+function emailText() { const s = state, rows = bySku(s.include); const tq = rows.reduce((a, r) => a + r.qty, 0), tn = r2(rows.reduce((a, r) => a + r.net, 0)); return [`Order number: ${orderNo(s.day)}`, `Amazon FBA shipped – up to ${ukDate(s.day)}`, "", ["SKU", "Qty", "Price per unit (GBP)", "Total (GBP)"].join("\t"), ...rows.map(r => [r.sku, r.qty, r.unit.toFixed(2), r.net.toFixed(2)].join("\t")), ["Total", tq, "", tn.toFixed(2)].join("\t")].join("\n"); }
+function emailHtml() {
+  const s = state, rows = bySku(s.include); const tq = rows.reduce((a, r) => a + r.qty, 0), tn = r2(rows.reduce((a, r) => a + r.net, 0)); const nSku = new Set(rows.map(r => r.sku)).size;
+  const esc = v => String(v).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const F = "font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#142326;";
+  const th = a => `<th style="${F}font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;color:#ffffff;background:#0d6e74;padding:8px 12px;white-space:nowrap;border:1px solid #0d6e74;text-align:${a};">`;
+  const td = (a, extra = "") => `<td style="${F}padding:8px 12px;border:1px solid #d7e0e1;text-align:${a};${extra}">`;
+  const body = rows.map((r, i) => { const bg = i % 2 ? "background:#f3f6f6;" : "background:#ffffff;"; return `<tr>${td("left", bg + "font-family:Consolas,'Courier New',monospace;font-weight:bold;white-space:nowrap;")}${esc(r.sku)}</td>${td("left", bg + "color:#5b6d70;")}${esc(r.product)}</td>${td("right", bg)}${r.qty}</td>${td("right", bg + "white-space:nowrap;")}£${r.unit.toFixed(2)}</td>${td("right", bg + "white-space:nowrap;")}£${r.net.toFixed(2)}</td></tr>`; }).join("");
+  return `<div style="${F}"><p style="${F}margin:0 0 4px;"><b>Order number: <span style="font-family:Consolas,'Courier New',monospace;font-size:16px;">${orderNo(s.day)}</span></b></p><p style="${F}margin:0 0 12px;color:#5b6d70;">Amazon FBA shipped – up to ${ukDate(s.day)} · ${s.include.length} Amazon order line${s.include.length === 1 ? "" : "s"}, none previously sent</p><table cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><thead><tr>${th("left")}SKU</th>${th("left")}Description</th>${th("right")}Qty</th>${th("right")}Price per unit</th>${th("right")}Total</th></tr></thead><tbody>${body}</tbody><tfoot><tr>${td("left", "font-weight:bold;background:#e2f0f0;")}Total</td>${td("left", "background:#e2f0f0;color:#5b6d70;")}${nSku} SKU${nSku === 1 ? "" : "s"} · net of VAT</td>${td("right", "font-weight:bold;background:#e2f0f0;")}${tq}</td>${td("right", "background:#e2f0f0;")}</td>${td("right", "font-weight:bold;background:#e2f0f0;white-space:nowrap;")}£${tn.toFixed(2)}</td></tr></tfoot></table></div>`;
+}
+function csvText() { const s = state, esc = v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v); return [["order_number", "sku", "qty", "price_per_unit_gbp", "total_gbp"].join(","), ...bySku(s.include).map(r => [orderNo(s.day), esc(r.sku), r.qty, r.unit.toFixed(2), r.net.toFixed(2)].join(","))].join("\n"); }
+async function copyTable() {
+  const t = emailText(), h = emailHtml();
+  try { await navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([h], { type: "text/html" }), "text/plain": new Blob([t], { type: "text/plain" }) })]); return true; } catch {}
+  try { const box = $("richbuf"); box.innerHTML = h; const range = document.createRange(); range.selectNodeContents(box); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); const done = document.execCommand("copy"); sel.removeAllRanges(); box.innerHTML = ""; if (done) return true; } catch {}
+  try { await navigator.clipboard.writeText(t); return true; } catch { return false; }
+}
+$("csvBtn").addEventListener("click", () => { const blob = new Blob([csvText()], { type: "text/csv" }); const a = el("a", { href: URL.createObjectURL(blob), download: `FBA_${orderNo(state.day)}.csv` }); document.body.append(a); a.click(); a.remove(); setStatus("CSV downloaded", "ok"); });
+$("day").addEventListener("change", async e => { if (!state || !e.target.value || state.sent) return; state.day = e.target.value; state.daySrc = "set by you"; await checkClash(); render(); });
+
+// One action: record everything in ONE transaction first, then copy. If it isn't recorded, nothing is copied.
+$("sendBtn").addEventListener("click", async () => {
+  if (!state) return; const s = state;
+  if (s.sent) { const ok = await copyTable(); setStatus(ok ? "Table copied again — paste into the email" : "Copy blocked — click again", ok ? "ok" : "err"); return; }
+  if (blockReason()) return;
+  const on = orderNo(s.day), now = new Date().toISOString(), who = me?.email || "";
+  $("sendBtn").disabled = true; setStatus("Recording…");
+  try {
+    await runTransaction(fs, async tx => {
+      const bref = doc(fs, "batches", on);
+      const b = s.include.length ? await tx.get(bref) : null;
+      const sentSnaps = [];
+      for (const l of s.include) sentSnaps.push(await tx.get(doc(fs, "sent", l.key)));
+      if (b && b.exists()) { const e = new Error("clash"); e.clash = b.data(); throw e; }
+      sentSnaps.forEach((ss, i) => { const l = s.include[i]; const prev = ss.exists() ? (ss.data().qty || 0) : 0; if (prev !== (l.prevQty || 0)) throw new Error("changed"); });
+      for (const l of s.include) {
+        tx.set(doc(fs, "sent", l.key), { orderId: l.oid, sku: l.sku, qty: (l.prevQty || 0) + l.qty, net: r2((l.prevNet || 0) + l.net), orderNumber: l.prevAs ? `${l.prevAs}+${on}` : on, sentAt: now, sentBy: who });
+        if (pendingMap.has(l.key)) tx.delete(doc(fs, "pending", l.key));
+      }
+      for (const l of s.newHold) tx.set(doc(fs, "pending", l.key), { orderId: l.oid, sku: l.sku, product: l.product, qty: l.qty, net: l.net, firstSeenDay: s.day, purchased: l.purchased, addedAt: now, addedBy: who });
+      for (const c of s.canc) if (pendingMap.has(c.key)) tx.delete(doc(fs, "pending", c.key));
+      if (s.include.length) { const rows = bySku(s.include); tx.set(bref, { orderNumber: on, day: s.day, lines: s.include.length, qty: rows.reduce((a, r) => a + r.qty, 0), net: r2(rows.reduce((a, r) => a + r.net, 0)), file: s.fileName, sentBy: who, updatedAt: now }); }
+    });
+    s.sent = true; render();
+    if (!s.include.length) { setStatus("Held lines saved", "ok"); return; }
+    const ok = await copyTable();
+    setStatus(ok ? `Order ${on} recorded and copied — paste into the email` : `Order ${on} recorded — click “Copy table again”`, ok ? "ok" : "err");
+  } catch (e) {
+    if (e?.message === "clash") { s.clash = e.clash; render(); setStatus("Order number already used — nothing copied", "err"); return; }
+    if (e?.message === "changed") { setStatus("Someone else just sent some of these lines — drop the report again", "err"); return; }
+    $("sendBtn").disabled = false;
+    setStatus(e?.code === "permission-denied" ? "You don’t have access to record sends" : "Couldn’t record — nothing copied, try again", "err");
+  }
+});
+function setStatus(t, kind) { const s = $("status"); s.textContent = t; s.className = "status" + (kind ? " " + kind : ""); }
+
+/* ---------- one-time history import ---------- */
+$("importFile").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f || !ready) return;
+  const st = $("importStatus");
+  try {
+    const data = JSON.parse(await f.text()); const b = writeBatch(fs); let n = 0;
+    for (const coll of ["sent", "pending", "batches"]) for (const [id, v] of Object.entries(data[coll] || {})) { b.set(doc(fs, coll, id), { ...v, importedBy: me?.email || "" }); n++; }
+    if (!n || n > 450) throw new Error("bad");
+    await b.commit(); st.textContent = ` Imported ${n} records`; st.className = "status ok";
+  } catch { st.textContent = " Couldn't import that file"; st.className = "status err"; }
+});
+
+/* ---------- drop zone ---------- */
+const drop = $("drop");
+$("file").addEventListener("change", e => { const f = e.target.files[0]; if (f) handleFile(f); e.target.value = ""; });
+drop.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } });
+["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("drop", e => { if (!drop.contains(e.target)) { e.preventDefault(); const f = e.dataTransfer?.files[0]; if (f) handleFile(f); } });
+</script>
+</body>
+</html>
