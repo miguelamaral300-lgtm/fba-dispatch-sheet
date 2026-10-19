@@ -229,6 +229,7 @@ textarea.copybuf { position: absolute; left: -9999px; }
           <button id="csvBtn" type="button" hidden>Download CSV</button>
           <span class="spacer"></span>
           <span class="status" id="status"></span>
+          <label id="ackWrap" hidden style="font-size:13.5px;display:flex;gap:6px;align-items:center;color:var(--bad);font-weight:600"><input type="checkbox" id="ack"> I've checked the “Check price” lines in Seller Central</label>
           <button class="primary" id="sendBtn" type="button">Copy email table &amp; mark as sent</button>
         </div>
       </div>
@@ -437,14 +438,19 @@ function lineFrom(r) {
   const gross = r2(num(r["item-price"]) ?? 0);
   const promo = r2(Math.abs(num(r["item-promotion-discount"]) ?? 0));
   const taxRaw = num(r["item-tax"]);
-  const paid = r2(gross - promo);
-  const tax = r2(taxRaw ?? paid / 6);
-  const net = r2(paid - tax);
+  // Amazon reports the promotion either including or excluding VAT (Seller Central shows it ex-VAT).
+  // Try both and keep the one where Amazon's VAT is exactly 20% of what the customer paid.
+  const fits = p => taxRaw !== null && Math.abs(taxRaw - p / 6) <= 0.02;
+  let paid = r2(gross - promo), promoIncl = promo, tax = r2(taxRaw ?? paid / 6), net = r2(paid - tax);
+  if (promo && !fits(paid)) {
+    const netEx = r2(gross / 1.2 - promo), paidEx = r2(netEx + (taxRaw ?? 0));
+    if (fits(paidEx)) { net = netEx; paid = paidEx; promoIncl = r2(gross - paidEx); }
+  }
   const flags = [];
   if (taxRaw === null && gross > 0) flags.push("VAT missing in report — estimated at 20%");
-  else if (paid > 0 && tax > 0 && Math.abs(tax - paid / 6) > 0.02) flags.push(`VAT £${tax.toFixed(2)} isn't 20% of £${paid.toFixed(2)} — check`);
-  if (promo) flags.push(`Promotion £${promo.toFixed(2)} taken off`);
-  return { oid: String(r["amazon-order-id"] || "").trim(), sku: String(r["sku"] || "").trim(), product: String(r["product-name"] || "").trim(), qty, gross, promo, tax, net, unitGross: qty ? r2(gross / qty) : 0, unitNet: qty ? r2(net / qty) : 0, purchased: r["purchase-date"] instanceof Date ? r["purchase-date"].toISOString() : String(r["purchase-date"] || ""), flags };
+  else if (paid > 0 && tax > 0 && !fits(paid)) flags.push(`VAT £${tax.toFixed(2)} isn't 20% of £${paid.toFixed(2)} paid — check`);
+  if (promo) flags.push(`Promotion £${promoIncl.toFixed(2)} inc VAT taken off`);
+  return { oid: String(r["amazon-order-id"] || "").trim(), sku: String(r["sku"] || "").trim(), product: String(r["product-name"] || "").trim(), qty, gross, promo: promoIncl, tax, net, unitGross: qty ? r2(gross / qty) : 0, unitNet: qty ? r2(net / qty) : 0, purchased: r["purchase-date"] instanceof Date ? r["purchase-date"].toISOString() : String(r["purchase-date"] || ""), flags };
 }
 function mergeLines(list) {
   const m = new Map();
@@ -510,7 +516,7 @@ async function analyse(objs, fileName) {
   const newHold = hold.filter(l => !pendingMap.has(l.key));
   const day = guessDay(fileName, objs);
   state = { fileName, include, hold, newHold, canc, otherBrand, alreadySent, day: day.iso, daySrc: day.src, sent: false, clash: null };
-  $("day").value = day.iso;
+  $("day").value = day.iso; $("ack").checked = false;
   await checkClash(); render();
 }
 async function checkClash() { state.clash = null; try { const b = await getDoc(doc(fs, "batches", orderNo(state.day))); if (b.exists()) state.clash = b.data(); } catch {} }
@@ -561,7 +567,9 @@ function render() {
   if (s.canc.length) p(`<b>${s.canc.length} cancelled line${s.canc.length === 1 ? "" : "s"}</b> ignored${s.canc.some(c => pendingMap.has(c.key)) ? " and will be removed from the waiting list" : ""}.`);
   const reason = blockReason(); $("blocker").innerHTML = reason; $("blocker").hidden = !reason;
   const nothing = !s.include.length && !s.newHold.length && !s.canc.some(c => pendingMap.has(c.key));
-  $("sendBtn").disabled = !!reason || (!s.sent && nothing);
+  $("ackWrap").hidden = !hardCount || s.sent;
+  if (!hardCount) $("ack").checked = false;
+  $("sendBtn").disabled = !!reason || (!s.sent && nothing) || (!s.sent && hardCount > 0 && !$("ack").checked);
   $("sendBtn").textContent = s.sent ? "Copy table again" : (s.include.length ? "Copy email table & mark as sent" : "Save held lines");
   $("csvBtn").hidden = !s.sent;
 }
@@ -585,6 +593,7 @@ async function copyTable() {
   try { await navigator.clipboard.writeText(t); return true; } catch { return false; }
 }
 $("csvBtn").addEventListener("click", () => { const blob = new Blob([csvText()], { type: "text/csv" }); const a = el("a", { href: URL.createObjectURL(blob), download: `FBA_${orderNo(state.day)}.csv` }); document.body.append(a); a.click(); a.remove(); setStatus("CSV downloaded", "ok"); });
+$("ack").addEventListener("change", () => { if (state) render(); });
 $("day").addEventListener("change", async e => { if (!state || !e.target.value || state.sent) return; state.day = e.target.value; state.daySrc = "set by you"; await checkClash(); render(); });
 
 // One action: record everything in ONE transaction first, then copy. If it isn't recorded, nothing is copied.
